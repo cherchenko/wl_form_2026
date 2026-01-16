@@ -15,5 +15,4 @@ dir_clean <- paste0(dir, "/clean/")
 if(!dir.exists(dir_data)){dir.create(dir_data)}
 if(!dir.exists(dir_clean)){dir.create(dir_clean)}
 dir_u <- paste0("U:/ISSN-data/mf_jsons")
-
-#source(paste0(dir_scripts, "/extra_functions_4_yd.R"))
+dir_f <- paste0("U:/ISSN-data/")

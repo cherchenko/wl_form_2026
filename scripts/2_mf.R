@@ -11,106 +11,126 @@ json_files <- json_files[gsub(".*/|\\..*", "", json_files) %in% tasks_wissns$iss
 # Создаем пустой список для результатов
 all_results <- list()
 
-# Обрабатываем каждый файл с проверкой ошибок
+# Обрабатываем каждый файл
 for (i in seq_along(json_files)) {
   file_path <- json_files[i]
-  cat(sprintf("Обработка файла %d из %d: %s\n", i, length(json_files), basename(file_path)))
+  cat(sprintf("Файл %d из %d: %s\n", i, length(json_files), basename(file_path)))
   
   tryCatch({
-    # Проверяем, что файл существует и не пустой
-    if (!file.exists(file_path)) {
-      warning(sprintf("Файл не существует: %s", file_path))
-      next
-    }
+    if (!file.exists(file_path) || file.size(file_path) == 0) next
     
-    if (file.size(file_path) == 0) {
-      warning(sprintf("Файл пустой: %s", file_path))
-      next
-    }
-    
-    # Читаем файл
     data <- fromJSON(file_path, simplifyVector = FALSE)
     
-    # Извлекаем нужные данные
+    # Собираем данные
+    elib_id <- if (!is.null(data$elibrary) && length(data$elibrary) > 0) {
+      ids <- na.omit(sapply(data$elibrary, function(x) gsub(".*id=([0-9]+).*", "\\1", x)))
+      if (length(ids) > 0) paste(ids, collapse = " | ") else NA_character_
+    } else NA_character_
     
-    # 1. elib_id - извлекаем цифры после id= из elibrary
-    elib_id <- NA
-    if (!is.null(data$elibrary) && length(data$elibrary) > 0) {
-      # Берем первую ссылку
-      elib_url <- data$elibrary[[1]]
-      # Извлекаем цифры после id=
-      elib_id <- gsub(".*id=([0-9]+).*", "\\1", elib_url)
-      # Если не извлеклось, оставляем NA
-      if (elib_id == elib_url) elib_id <- NA
-    }
+    url <- if (!is.null(data$url_editors) && length(data$url_editors) > 0) {
+      urls <- na.omit(sapply(data$url_editors, function(x) {
+        if (!grepl("elibrary", x$url, ignore.case = TRUE)) x$url else NA_character_
+      }))
+      if (length(urls) > 0) paste(urls, collapse = " | ") else NA_character_
+    } else NA_character_
     
-    # 2. Получаем ISSN (Print и Online)
-    issn_print <- NA
-    issn_online <- NA
+    url_mirror <- if (!is.null(data$url_mirror) && length(data$url_mirror) > 0) {
+      mirrors <- na.omit(sapply(data$url_mirror, function(x) {
+        if (!grepl("elibrary", x, ignore.case = TRUE)) x else NA_character_
+      }))
+      if (length(mirrors) > 0) paste(mirrors, collapse = " | ") else NA_character_
+    } else NA_character_
+    
+    full_title <- ifelse(!is.null(data$title_full), data$title_full, NA_character_)
+    
+    rkn_number <- if (!is.null(data$rkn) && length(data$rkn) > 0) {
+      rkns <- na.omit(sapply(data$rkn, function(x) {
+        if (!is.null(x$rkn_num) && x$rkn_num != "") {
+          if (!is.null(x$rkn_date) && x$rkn_date != "") {
+            paste0(x$rkn_num, " от ", x$rkn_date)
+          } else {
+            x$rkn_num
+          }
+        } else NA_character_
+      }))
+      if (length(rkns) > 0) paste(rkns, collapse = " | ") else NA_character_
+    } else NA_character_
+    
+    # ISSN
+    print_issns <- character()
+    online_issns <- character()
+    other_issns <- character()
     
     if (!is.null(data$issns) && length(data$issns) > 0) {
       for (issn_item in data$issns) {
-        if (!is.null(issn_item$type) && !is.null(issn_item$issn)) {
+        if (!is.null(issn_item$issn)) {
           if (issn_item$type == "Print") {
-            issn_print <- issn_item$issn
+            print_issns <- c(print_issns, issn_item$issn)
           } else if (issn_item$type == "Online") {
-            issn_online <- issn_item$issn
+            online_issns <- c(online_issns, issn_item$issn)
+          } else {
+            other_issns <- c(other_issns, issn_item$issn)
           }
         }
       }
     }
     
-    # 3. URL из url_editors (берем первый)
-    url <- NA
-    if (!is.null(data$url_editors) && length(data$url_editors) > 0) {
-      url_item <- data$url_editors[[1]]
-      if (!is.null(url_item$url)) {
-        url <- url_item$url
-      }
-    }
-    
-    # 4. url_mirror (берем первый)
-    url_mirror <- NA
-    if (!is.null(data$url_mirror) && length(data$url_mirror) > 0) {
-      url_mirror <- data$url_mirror[[1]]
-    }
-    
-    # 5. full_title
-    full_title <- ifelse(!is.null(data$title_full), data$title_full, NA)
-    
-    # 6. rkn_number (если есть rkn, берем первый)
-    rkn_number <- NA
-    if (!is.null(data$rkn) && length(data$rkn) > 0) {
-      rkn <- data$rkn[[1]]  # Берем первый элемент
-      
-      if (!is.null(rkn$rkn_num) && rkn$rkn_num != "") {
-        rkn_number <- rkn$rkn_num
-        if (!is.null(rkn$rkn_date) && rkn$rkn_date != "") {
-          rkn_number <- paste0(rkn_number, " от ", rkn$rkn_date)
+    # Создаем строки
+    if (length(print_issns) > 0 && length(online_issns) > 0) {
+      for (p in print_issns) {
+        for (o in online_issns) {
+          file_df <- data.frame(
+            elib_id = elib_id,
+            full_title = full_title,
+            issn_print = p,
+            issn_online = o,
+            issn_other = if(length(other_issns) > 0) other_issns[1] else NA_character_,
+            url = url,
+            url_mirror = url_mirror,
+            rkn_number = rkn_number,
+            stringsAsFactors = FALSE
+          )
+          all_results[[length(all_results) + 1]] <- file_df
         }
       }
+    } else if (length(print_issns) > 0) {
+      for (p in print_issns) {
+        file_df <- data.frame(
+          elib_id = elib_id,
+          full_title = full_title,
+          issn_print = p,
+          issn_online = NA_character_,
+          issn_other = if(length(other_issns) > 0) other_issns[1] else NA_character_,
+          url = url,
+          url_mirror = url_mirror,
+          rkn_number = rkn_number,
+          stringsAsFactors = FALSE
+        )
+        all_results[[length(all_results) + 1]] <- file_df
+      }
+    } else if (length(online_issns) > 0) {
+      for (o in online_issns) {
+        file_df <- data.frame(
+          elib_id = elib_id,
+          full_title = full_title,
+          issn_print = NA_character_,
+          issn_online = o,
+          issn_other = if(length(other_issns) > 0) other_issns[1] else NA_character_,
+          url = url,
+          url_mirror = url_mirror,
+          rkn_number = rkn_number,
+          stringsAsFactors = FALSE
+        )
+        all_results[[length(all_results) + 1]] <- file_df
+      }
     }
     
-    # Создаем строку для этого файла
-    file_df <- data.frame(
-      elib_id = elib_id,
-      full_title = full_title,
-      issn_print = issn_print,
-      issn_online = issn_online,
-      url = url,
-      url_mirror = url_mirror,
-      rkn_number = rkn_number,
-      stringsAsFactors = FALSE
-    )
-    
-    all_results[[length(all_results) + 1]] <- file_df
-    cat(sprintf("  Успешно обработано\n"))
+    cat("  OK\n")
     
   }, error = function(e) {
-    warning(sprintf("Ошибка при обработке файла %s: %s", basename(file_path), e$message))
+    warning(sprintf("Ошибка в %s: %s", basename(file_path), e$message))
   })
 }
-
 # Объединяем все результаты
 all <- do.call(rbind, all_results) |>
   distinct() |>

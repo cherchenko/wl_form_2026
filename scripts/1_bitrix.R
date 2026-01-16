@@ -58,3 +58,7 @@ tasks_wissns <- tasks |>
   mutate(publisher = str_extract(description, enc2utf8('^[\\-]+[^\\\r^\\\n]+[\\\r\\\n\\-]+[^\\\r^\\\n]+'))) |>   
   mutate(publisher = str_remove(publisher, enc2utf8('^[\\-]+[^\\\r^\\\n]+[\\\r\\\n\\-]+'))) |> 
   select(id, stageId, journal_id, title, issns, publisher, title, description)
+
+t_file <- paste0(dir_clean, "t.xlsx")
+
+writexl::write_xlsx(tasks_wissns, t_file)
