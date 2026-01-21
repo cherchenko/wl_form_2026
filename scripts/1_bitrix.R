@@ -39,7 +39,15 @@ get_BX_tasks_from_group <- function(xgroup_id){
 tasks <- get_BX_tasks_from_group(58) |> map_df(~.x)
 tasks <- tasks |>
   filter(stageId != "679") |>
-  filter(!grepl("(повышение уровня)", title)) |>
+  mutate(
+    type = case_when(
+      grepl("(повышение уровня)", title) ~ "level_up",
+      grepl("(включение в ЕГПНИ)", title) ~ "include",
+      grepl("(исключение из ЕГПНИ)", title) ~ "exclude",
+      TRUE ~ NA_character_
+    )
+  ) |>
+  #filter(!grepl("(повышение уровня)", title)) |>
   filter(!grepl("ЗИ", title))
 
 tasks_wissns <- tasks |> 
@@ -57,7 +65,7 @@ tasks_wissns <- tasks |>
   mutate(journal_id = paste0(id, ':', journal_id)) |> 
   mutate(publisher = str_extract(description, enc2utf8('^[\\-]+[^\\\r^\\\n]+[\\\r\\\n\\-]+[^\\\r^\\\n]+'))) |>   
   mutate(publisher = str_remove(publisher, enc2utf8('^[\\-]+[^\\\r^\\\n]+[\\\r\\\n\\-]+'))) |> 
-  select(id, stageId, journal_id, title, issns, publisher, title, description)
+  select(id, stageId, journal_id, title, issns, publisher, title, description, type)
 
 t_file <- paste0(dir_clean, "t.xlsx")
 
