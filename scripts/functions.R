@@ -148,7 +148,6 @@ get_task_comments <- function(task_id, batch_size = 50) {
 
 get_BX_comments <- function(task_ids, batch_size = 50) {
   
-  # Основной цикл по задачам
   result <- data.frame(
     task_id = character(),
     all_comments = character(),
@@ -161,14 +160,14 @@ get_BX_comments <- function(task_ids, batch_size = 50) {
     cat(sprintf("Processing task %d of %d: ID = %s\n", i, length(task_ids), task_id))
     
     task_comments <- tryCatch({
-      get_task_comments(task_id, batch_size)  # передаем batch_size
+      get_task_comments(task_id, batch_size)
     }, error = function(e) {
       cat(sprintf("  Error for task %s: %s\n", task_id, e$message))
       return(NULL)
     })
     
     if (!is.null(task_comments) && nrow(task_comments) > 0) {
-      # Очищаем текст от HTML и нормализуем
+      # Очищаем текст и фильтруем
       task_comments <- task_comments |>
         dplyr::mutate(
           clean_text = gsub("<[^>]+>", " ", comment_text),
@@ -176,21 +175,21 @@ get_BX_comments <- function(task_ids, batch_size = 50) {
           clean_text = trimws(clean_text),
           clean_text_lower = tolower(clean_text),
           
-          # Ищем фразы про отправку ответа (нужны только такие комментарии)
+          # Ищем фразы про отправку ответа
           is_needed = grepl("отправлен\\s+ответ", clean_text_lower, perl = TRUE) |
             grepl("ответ\\s+отправлен", clean_text_lower, perl = TRUE) |
-            grepl("ответ\\s+направлен", clean_text_lower, perl = TRUE),
-          
-        
-          comment_only = clean_text
-        ) |>
+            grepl("ответ\\s+направлен", clean_text_lower, perl = TRUE)
+        )
+      
+      # Отбираем нужные комментарии
+      needed_comments <- task_comments |> 
         dplyr::filter(is_needed) |> 
         dplyr::arrange(created_date)
       
-      if (nrow(task_comments) > 0) {
-        
-        all_comments_text <- paste(task_comments$comment_only, collapse = "\n")
-        comment_count <- nrow(task_comments)
+      if (nrow(needed_comments) > 0) {
+        # Берем ТЕКСТ ИЗ ИСХОДНОГО ПОЛЯ comment_text, а не clean_text
+        all_comments_text <- paste(needed_comments$comment_text, collapse = "\n---\n")
+        comment_count <- nrow(needed_comments)
         
         result <- rbind(
           result,

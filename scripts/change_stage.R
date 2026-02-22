@@ -74,7 +74,7 @@ t <- tasks |> filter(id %in% unique_ids) |>
   # отбор только тех, где на самом деле несколько журналов, а не переводные версии или переименования
   filter(grepl("Журналы", title))
 
-unique_ids <- unique(tasks_journals$id)
+unique_ids <- unique(t$id)
 
 # Собираем комментарии для задач с несколькими журналами
 
