@@ -1,8 +1,7 @@
 # Перемещение российских журналов, отправленных на экспертизу РАН, на соответсвующую стадию канбан доски в Битрикс
+tasks <- get_BX_tasks_from_group(58)
 
-# Собираем задачи в Битрикс
 
-tasks <- get_BX_tasks_from_group(58) |> map_df(~.x)
 tasks <- tasks |>
   filter(!grepl("679|889", stageId )) |>
   mutate(
@@ -35,7 +34,7 @@ tasks_wissns <- tasks |>
   mutate(publisher = str_remove(publisher, enc2utf8('^[\\-]+[^\\\r^\\\n]+[\\\r\\\n\\-]+'))) |> 
   select(id, stageId, journal_id, title, issns, issn, publisher, title, description, type)
 
-# Списки журналов, отправленные в РАН
+# Списки журналов, отправленные в РАН (распаковать в dir_data архив с отправленными в РАН файлами)
 RAN <- list.files(dir_data, pattern = "all_lists", full.names = T) |> 
   lapply(readxl::read_xlsx, col_types = "text", skip = 1) |>
   bind_rows()
@@ -62,17 +61,31 @@ tasks_wissns <- tasks_wissns |>
   select(-issn) |>
   distinct()
 
-# Проверка, есть ли карточки, в которых несколько журналов и не все из них отправлены на Экспертизу РАН
-
-test <- tasks_wissns |>
-  select(id, journal_id, title, in_RAN) |>
+# Выбор задач, в которых несколько журналов
+tasks_journals <- tasks_wissns |>
   group_by(id) |>
-  mutate(
-    across(everything(), ~paste(.x, collapse = "; "))) |>
-    ungroup() |>
-    distinct()
+  filter(n() > 1) |>
+  ungroup()
 
-# Перемещенеи на стадию "Направлен в РАН"
+
+unique_ids <- unique(tasks_journals$id)
+
+# Собираем комментарии для задач с несколькими журналами
+
+tasks_comments <- get_BX_comments(unique_ids)
+
+# Создаем подзадачи с отдельными журналами
+
+# Добавляем к ним комментарии
+
+# Добавляем новые задачи к общему списку задач и убираем из него задачи с несколькими журналами
+
+# Перемещение задач с несколькими журналами на стадию архив = 679
+
+task_change_journals_res <- tasks_journals$id |>   filter(id == "10805") |>
+  map_df(~change_BX_task_stage(task_id = .x, stage_id = 679))
+
+# Перемещенеи всех журналов из обращений и датафрейма RAN на стадию "Направлен в РАН"
 
 tasks_RAN <- tasks_wissns |>
   filter(!is.na(in_RAN)) |>
